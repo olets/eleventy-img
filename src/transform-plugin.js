@@ -11,29 +11,54 @@ function isFullUrl(url) {
   }
 }
 
-function normalizeImageSource({ inputPath, contentDir }, src) {
-  if(isFullUrl(src)) {
-    return src;
+function normalizeImageSource({ inputPath, contentDir }, url) {
+  if(isFullUrl(url)) {
+    return url;
   }
 
-  if(!path.isAbsolute(src)) {
-    // if the image src is relative, make it relative to the template file (inputPath);
+  if(!path.isAbsolute(url)) {
+    // if the url is relative, make it relative to the template file (inputPath);
     let dir = path.dirname(inputPath);
-    return path.join(dir, src);
+    return path.join(dir, url);
   }
 
-  // if the image src is absolute, make it relative to the content directory.
-  return path.join(contentDir, src);
+  // if the url is absolute, make it relative to the content directory.
+  return path.join(contentDir, url);
+}
+
+
+function normalizeImageSrcset({ inputPath, contentDir }, srcset) {
+  const candidatesDelimiter = ", ";
+
+  const imageCandidates = srcset.split(candidatesDelimiter);
+
+  const normalizedImageCandidates = imageCandidates.map(candidate => {
+    const candidateDelimiter = " ";
+    const [url, condition] = candidate.split(candidateDelimiter);
+    const normalizedUrl = normalizeImageSource({ inputPath, contentDir }, url);
+
+    return [normalizedUrl, condition].join(candidateDelimiter);
+  });
+
+  return normalizedImageCandidates.join(candidatesDelimiter);
 }
 
 function transformTag(context, node, opts) {
-  let originalSource = node.attrs.src;
+  let originalSrc = node.attrs.src;
+  let originalSrcset = node.attrs?.srcset;
   let { inputPath, outputPath, url } = context.page;
 
   node.attrs.src = normalizeImageSource({
     inputPath,
     contentDir: opts.eleventyDirectories.input,
-  }, originalSource);
+  }, originalSrc);
+
+  if (originalSrcset) {
+    node.attrs.srcset = normalizeImageSrcset({
+      inputPath,
+      contentDir: opts.eleventyDirectories.input,
+    }, originalSrcset);
+  }
 
   let instanceOptions = {};
 
@@ -52,7 +77,7 @@ function transformTag(context, node, opts) {
     }
   } else if(opts.urlPath) {
     // do nothing, user has specified directories in the plugin options.
-  } else if(path.isAbsolute(originalSource)) {
+  } else if(path.isAbsolute(originalSrc)) {
     // if the path is an absolute one (relative to the content directory) write to a global output directory to avoid duplicate writes for identical source images.
     instanceOptions = {
       outputDir: path.join(opts.eleventyDirectories.output, "/img/"),
